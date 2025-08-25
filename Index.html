@@ -1,17 +1,20 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="th">
 <head>
   <meta charset="UTF-8">
   <title>DFace Models Hosting</title>
   <style>
-    body { font-family: sans-serif; background:#f7f9fc; margin:0; padding:2em; }
+    body { font-family: "Segoe UI", sans-serif; background:#f8fafc; margin:0; padding:2em; }
     h1 { color:#2c3e50; }
-    button { padding:8px 14px; margin:10px 0; background:#3498db; color:white; border:none; border-radius:4px; cursor:pointer; }
-    table { border-collapse: collapse; margin-top: 20px; }
-    th, td { border:1px solid #ccc; padding:6px 10px; }
-    th { background:#ecf0f1; }
+    button { padding:10px 16px; margin:12px 0; background:#2563eb; color:white; border:none; border-radius:6px; cursor:pointer; }
+    button:hover { background:#1d4ed8; }
+    table { border-collapse: collapse; margin-top:20px; width:100%; max-width:700px; }
+    th, td { border:1px solid #ccc; padding:8px 10px; font-size:14px; }
+    th { background:#f1f5f9; }
     .ok { color:green; font-weight:bold; }
     .fail { color:red; font-weight:bold; }
+    a { color:#2563eb; text-decoration:none; }
+    a:hover { text-decoration:underline; }
   </style>
 </head>
 <body>
@@ -39,18 +42,18 @@
         const url = `${BASE}/${file}`;
         try {
           const res = await fetch(url, { method: "HEAD" });
-          return { file, ok: res.ok, status: res.status };
+          return { file, url, ok: res.ok, status: res.status };
         } catch (e) {
-          return { file, ok: false, status: "error" };
+          return { file, url, ok: false, status: "error" };
         }
       }));
 
-      // สร้างตารางผลลัพธ์
-      let html = "<table><tr><th>ไฟล์</th><th>สถานะ</th></tr>";
+      let html = "<table><tr><th>ไฟล์</th><th>สถานะ</th><th>ลิงก์</th></tr>";
       results.forEach(r => {
         html += `<tr>
           <td>${r.file}</td>
           <td class="${r.ok ? 'ok':'fail'}">${r.ok ? '✓ OK' : '✗ Missing'} (${r.status})</td>
+          <td><a href="${r.url}" target="_blank">เปิด</a></td>
         </tr>`;
       });
       html += "</table>";
