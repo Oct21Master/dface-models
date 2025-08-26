@@ -1,152 +1,46 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="utf-8" />
-  <title>DFace Models Hosting — Self Check</title>
+  <meta charset="UTF-8" />
+  <title>DFace Hawk Eye — Patch Test CDN SSD</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    :root { --ok:#16a34a; --warn:#eab308; --fail:#dc2626; --ink:#111827; --bg:#f8fafc; }
-    *{box-sizing:border-box}
-    body{font-family:system-ui,Segoe UI,Roboto,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
-    header{padding:18px 20px;background:#fff;border-bottom:1px solid #e5e7eb}
-    main{padding:16px}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    button{padding:10px 14px;border:0;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer}
-    input[type=text]{padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;min-width:360px}
-    table{width:100%;border-collapse:collapse;margin-top:12px;background:#fff;border:1px solid #e5e7eb}
-    th,td{padding:8px 10px;border-bottom:1px solid #eef2f7;font-size:14px}
-    th{background:#f9fafb;text-align:left}
-    .ok{color:var(--ok);font-weight:700}
-    .fail{color:var(--fail);font-weight:700}
-    .warn{color:var(--warn);font-weight:700}
-    small.note{color:#6b7280}
-    .tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef2ff;color:#3730a3;margin-right:6px;font-size:12px}
-    #sum{margin-top:10px}
-    .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
-  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 </head>
 <body>
-<header>
-  <h2>DFace Models Hosting — ตรวจสอบไฟล์โมเดล</h2>
-  <div class="row" style="margin-top:8px">
-    <input id="base" type="text" value="https://oct21master.github.io/dface-models/models" />
-    <button onclick="run()">ตรวจสอบไฟล์โมเดล</button>
-    <small class="note">ตั้งค่า BASE URL ให้ตรงกับที่โฮสต์โมเดลของคุณ</small>
-  </div>
-  <div id="sum"></div>
-</header>
+  <h2>DFace Hawk Eye — Patch CDN SSD</h2>
+  <button onclick="boot()">🚀 โหลดโมเดล</button>
+  <div id="log" style="white-space:pre-line;font-family:monospace"></div>
 
-<main>
-  <div id="tables"></div>
-  <p class="mono" id="log"></p>
-</main>
+  <script>
+  const BASE_GH = "https://oct21master.github.io/dface-models/models"; 
+  const BASE_SSD = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights"; 
+  const logEl = document.getElementById('log');
+  function log(s){ logEl.textContent += s + "\n"; }
 
-<script>
-/* ===== ตั้งชื่อ manifest ที่ต้องมี =====
-   สคริปต์จะอ่าน manifest แล้วเช็ก shard ที่อ้างถึงโดยอัตโนมัติ  */
-const MANIFESTS = [
-  { key: 'tiny_face_detector',  file: 'tiny_face_detector_model-weights_manifest.json',  title: 'Tiny Face Detector' },
-  { key: 'face_landmark_68',    file: 'face_landmark_68_model-weights_manifest.json',    title: 'Face Landmark 68' },
-  { key: 'face_recognition',    file: 'face_recognition_model-weights_manifest.json',    title: 'Face Recognition' },
-  { key: 'ssd_mobilenetv1',     file: 'ssd_mobilenetv1_model-weights_manifest.json',     title: 'SSD Mobilenet v1' }
-];
+  async function boot(){
+    log("เริ่มโหลดโมเดล...");
+    try{ await tf.setBackend('webgl'); }catch(_){}
+    await tf.ready();
+    log(`tf backend: ${tf.getBackend()}`);
 
-const logEl = document.getElementById('log');
-function log(msg){ logEl.textContent += msg + "\n"; }
-
-async function head(url){
-  try{
-    const res = await fetch(url, { method:'HEAD', cache:'no-store' });
-    return { ok: res.ok, status: res.status };
-  }catch(e){
-    return { ok:false, status: 'ERR' };
-  }
-}
-
-async function checkManifest(base, mf) {
-  const url = `${base}/${mf.file}`;
-  const r = await fetch(url, { cache:'no-store' }).catch(()=>null);
-  if (!r || !r.ok) return { title: mf.title, manifest: { url, ok:false, status: r ? r.status : 'ERR' }, shards: [] };
-
-  const j = await r.json().catch(()=>({}));
-  // รองรับโครง TFJS: { weightsManifest: [ {paths: []}, ... ] }
-  const shards = [];
-  const wm = j.weightsManifest || j.manifest || [];
-  wm.forEach(g=>{
-    (g.paths||[]).forEach(p=>{
-      // ถ้า path ใน manifest มีโฟลเดอร์ย่อยอยู่แล้ว จะ concat ตรง ๆ
-      const shardUrl = `${base}/${p}`;
-      shards.push(shardUrl);
-    });
-  });
-
-  // ถ้าหา paths ไม่ได้ ให้เดาว่ามี shard1 (+ shard2 สำหรับ SSD/Recognition)
-  if (shards.length === 0) {
-    // fallback แบบเดา
-    if (mf.key === 'face_recognition' || mf.key === 'ssd_mobilenetv1') {
-      shards.push(`${base}/${mf.key}_model-shard1`.replace('face_recognition','face_recognition_model').replace('ssd_mobilenetv1','ssd_mobilenetv1_model'));
-      shards.push(`${base}/${mf.key}_model-shard2`.replace('face_recognition','face_recognition_model').replace('ssd_mobilenetv1','ssd_mobilenetv1_model'));
-    } else {
-      shards.push(`${base}/${mf.key}_model-shard1`.replace('tiny_face_detector','tiny_face_detector_model').replace('face_landmark_68','face_landmark_68_model'));
+    try {
+      // Tiny
+      await faceapi.nets.tinyFaceDetector.loadFromUri(BASE_GH);
+      log("✅ TinyFaceDetector loaded (GitHub)");
+      // Landmark68
+      await faceapi.nets.faceLandmark68Net.loadFromUri(BASE_GH);
+      log("✅ Landmark68 loaded (GitHub)");
+      // Recognition
+      await faceapi.nets.faceRecognitionNet.loadFromUri(BASE_GH);
+      log("✅ FaceRecognition loaded (GitHub)");
+      // SSD Mobilenet v1 (ใช้ CDN)
+      await faceapi.nets.ssdMobilenetv1.loadFromUri(BASE_SSD);
+      log("✅ SSD Mobilenet v1 loaded (CDN)");
+    } catch(e) {
+      log("❌ Error: " + e.message);
     }
   }
-
-  // เช็ก shard ทีละไฟล์ด้วย HEAD
-  const results = [];
-  for (const s of shards) {
-    const h = await head(s);
-    results.push({ url: s, ok: h.ok, status: h.status });
-  }
-  return { title: mf.title, manifest: { url, ok:true, status:200 }, shards: results };
-}
-
-function renderTable(sectionId, title, rows){
-  const wrap = document.createElement('div');
-  wrap.innerHTML = `
-    <h3><span class="tag">${title}</span></h3>
-    <table>
-      <thead><tr><th>ไฟล์</th><th>สถานะ</th><th>ลิงก์</th></tr></thead>
-      <tbody id="${sectionId}"></tbody>
-    </table>`;
-  document.getElementById('tables').appendChild(wrap);
-
-  const tb = document.getElementById(sectionId);
-  rows.forEach(r=>{
-    const cls = r.ok ? 'ok' : (r.status===404 ? 'fail' : 'warn');
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="mono">${r.url.replace(location.origin,'')}</td>
-      <td class="${cls}">${r.ok ? 'OK ('+r.status+')' : (r.status==='ERR' ? 'ERR (เน็ต/CORS)' : 'HTTP '+r.status)}</td>
-      <td><a href="${r.url}" target="_blank">เปิด</a></td>`;
-    tb.appendChild(tr);
-  });
-}
-
-async function run(){
-  document.getElementById('tables').innerHTML = '';
-  logEl.textContent = '';
-  const base = document.getElementById('base').value.replace(/\/+$/,'');
-  const allResults = [];
-  let okCount = 0, total = 0;
-
-  for (const mf of MANIFESTS) {
-    log(`กำลังตรวจ: ${mf.title} ...`);
-    const res = await checkManifest(base, mf);
-    const rows = [{ url: res.manifest.url, ok: res.manifest.ok, status: res.manifest.status }].concat(res.shards);
-    renderTable('sec_'+mf.key, mf.title, rows);
-    rows.forEach(r => { total++; if(r.ok) okCount++; });
-    allResults.push({ mf: mf.title, rows });
-  }
-
-  const txt = (okCount===total)
-    ? `✅ ไฟล์ครบและเข้าถึงได้ทั้งหมด (${okCount}/${total})`
-    : `⚠️ พบข้อผิดพลาดบางไฟล์ (${okCount}/${total}) — ตรวจสอบชื่อไฟล์/ตำแหน่ง/Cache`;
-
-  document.getElementById('sum').innerHTML = `<strong>${txt}</strong>`;
-}
-
-// รันอัตโนมัติครั้งแรก
-run();
-</script>
+  </script>
 </body>
 </html>
