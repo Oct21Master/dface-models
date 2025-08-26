@@ -1,64 +1,152 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8">
-  <title>DFace Models Hosting</title>
+  <meta charset="utf-8" />
+  <title>DFace Models Hosting — Self Check</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { font-family: "Segoe UI", sans-serif; background:#f8fafc; margin:0; padding:2em; }
-    h1 { color:#2c3e50; }
-    button { padding:10px 16px; margin:12px 0; background:#2563eb; color:white; border:none; border-radius:6px; cursor:pointer; }
-    button:hover { background:#1d4ed8; }
-    table { border-collapse: collapse; margin-top:20px; width:100%; max-width:700px; }
-    th, td { border:1px solid #ccc; padding:8px 10px; font-size:14px; }
-    th { background:#f1f5f9; }
-    .ok { color:green; font-weight:bold; }
-    .fail { color:red; font-weight:bold; }
-    a { color:#2563eb; text-decoration:none; }
-    a:hover { text-decoration:underline; }
+    :root { --ok:#16a34a; --warn:#eab308; --fail:#dc2626; --ink:#111827; --bg:#f8fafc; }
+    *{box-sizing:border-box}
+    body{font-family:system-ui,Segoe UI,Roboto,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
+    header{padding:18px 20px;background:#fff;border-bottom:1px solid #e5e7eb}
+    main{padding:16px}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    button{padding:10px 14px;border:0;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer}
+    input[type=text]{padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;min-width:360px}
+    table{width:100%;border-collapse:collapse;margin-top:12px;background:#fff;border:1px solid #e5e7eb}
+    th,td{padding:8px 10px;border-bottom:1px solid #eef2f7;font-size:14px}
+    th{background:#f9fafb;text-align:left}
+    .ok{color:var(--ok);font-weight:700}
+    .fail{color:var(--fail);font-weight:700}
+    .warn{color:var(--warn);font-weight:700}
+    small.note{color:#6b7280}
+    .tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef2ff;color:#3730a3;margin-right:6px;font-size:12px}
+    #sum{margin-top:10px}
+    .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
   </style>
 </head>
 <body>
-  <h1>DFace Models Hosting</h1>
-  <p>โฟลเดอร์นี้โฮสต์ไฟล์โมเดล <code>face-api.js</code> สำหรับ DFace</p>
-  <button onclick="checkModels()">ตรวจสอบไฟล์โมเดล</button>
-  <div id="result"></div>
+<header>
+  <h2>DFace Models Hosting — ตรวจสอบไฟล์โมเดล</h2>
+  <div class="row" style="margin-top:8px">
+    <input id="base" type="text" value="https://oct21master.github.io/dface-models/models" />
+    <button onclick="run()">ตรวจสอบไฟล์โมเดล</button>
+    <small class="note">ตั้งค่า BASE URL ให้ตรงกับที่โฮสต์โมเดลของคุณ</small>
+  </div>
+  <div id="sum"></div>
+</header>
 
-  <script>
-    const BASE = "https://oct21master.github.io/dface-models/models";
-    const required = [
-      "tiny_face_detector_model-weights_manifest.json",
-      "tiny_face_detector_model-shard1",
-      "face_landmark_68_model-weights_manifest.json",
-      "face_landmark_68_model-shard1",
-      "face_recognition_model-weights_manifest.json",
-      "face_recognition_model-shard1",
-      "face_recognition_model-shard2"
-    ];
+<main>
+  <div id="tables"></div>
+  <p class="mono" id="log"></p>
+</main>
 
-    async function checkModels() {
-      const container = document.getElementById("result");
-      container.innerHTML = "<p>กำลังตรวจสอบ...</p>";
-      const results = await Promise.all(required.map(async file => {
-        const url = `${BASE}/${file}`;
-        try {
-          const res = await fetch(url, { method: "HEAD" });
-          return { file, url, ok: res.ok, status: res.status };
-        } catch (e) {
-          return { file, url, ok: false, status: "error" };
-        }
-      }));
+<script>
+/* ===== ตั้งชื่อ manifest ที่ต้องมี =====
+   สคริปต์จะอ่าน manifest แล้วเช็ก shard ที่อ้างถึงโดยอัตโนมัติ  */
+const MANIFESTS = [
+  { key: 'tiny_face_detector',  file: 'tiny_face_detector_model-weights_manifest.json',  title: 'Tiny Face Detector' },
+  { key: 'face_landmark_68',    file: 'face_landmark_68_model-weights_manifest.json',    title: 'Face Landmark 68' },
+  { key: 'face_recognition',    file: 'face_recognition_model-weights_manifest.json',    title: 'Face Recognition' },
+  { key: 'ssd_mobilenetv1',     file: 'ssd_mobilenetv1_model-weights_manifest.json',     title: 'SSD Mobilenet v1' }
+];
 
-      let html = "<table><tr><th>ไฟล์</th><th>สถานะ</th><th>ลิงก์</th></tr>";
-      results.forEach(r => {
-        html += `<tr>
-          <td>${r.file}</td>
-          <td class="${r.ok ? 'ok':'fail'}">${r.ok ? '✓ OK' : '✗ Missing'} (${r.status})</td>
-          <td><a href="${r.url}" target="_blank">เปิด</a></td>
-        </tr>`;
-      });
-      html += "</table>";
-      container.innerHTML = html;
+const logEl = document.getElementById('log');
+function log(msg){ logEl.textContent += msg + "\n"; }
+
+async function head(url){
+  try{
+    const res = await fetch(url, { method:'HEAD', cache:'no-store' });
+    return { ok: res.ok, status: res.status };
+  }catch(e){
+    return { ok:false, status: 'ERR' };
+  }
+}
+
+async function checkManifest(base, mf) {
+  const url = `${base}/${mf.file}`;
+  const r = await fetch(url, { cache:'no-store' }).catch(()=>null);
+  if (!r || !r.ok) return { title: mf.title, manifest: { url, ok:false, status: r ? r.status : 'ERR' }, shards: [] };
+
+  const j = await r.json().catch(()=>({}));
+  // รองรับโครง TFJS: { weightsManifest: [ {paths: []}, ... ] }
+  const shards = [];
+  const wm = j.weightsManifest || j.manifest || [];
+  wm.forEach(g=>{
+    (g.paths||[]).forEach(p=>{
+      // ถ้า path ใน manifest มีโฟลเดอร์ย่อยอยู่แล้ว จะ concat ตรง ๆ
+      const shardUrl = `${base}/${p}`;
+      shards.push(shardUrl);
+    });
+  });
+
+  // ถ้าหา paths ไม่ได้ ให้เดาว่ามี shard1 (+ shard2 สำหรับ SSD/Recognition)
+  if (shards.length === 0) {
+    // fallback แบบเดา
+    if (mf.key === 'face_recognition' || mf.key === 'ssd_mobilenetv1') {
+      shards.push(`${base}/${mf.key}_model-shard1`.replace('face_recognition','face_recognition_model').replace('ssd_mobilenetv1','ssd_mobilenetv1_model'));
+      shards.push(`${base}/${mf.key}_model-shard2`.replace('face_recognition','face_recognition_model').replace('ssd_mobilenetv1','ssd_mobilenetv1_model'));
+    } else {
+      shards.push(`${base}/${mf.key}_model-shard1`.replace('tiny_face_detector','tiny_face_detector_model').replace('face_landmark_68','face_landmark_68_model'));
     }
-  </script>
+  }
+
+  // เช็ก shard ทีละไฟล์ด้วย HEAD
+  const results = [];
+  for (const s of shards) {
+    const h = await head(s);
+    results.push({ url: s, ok: h.ok, status: h.status });
+  }
+  return { title: mf.title, manifest: { url, ok:true, status:200 }, shards: results };
+}
+
+function renderTable(sectionId, title, rows){
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <h3><span class="tag">${title}</span></h3>
+    <table>
+      <thead><tr><th>ไฟล์</th><th>สถานะ</th><th>ลิงก์</th></tr></thead>
+      <tbody id="${sectionId}"></tbody>
+    </table>`;
+  document.getElementById('tables').appendChild(wrap);
+
+  const tb = document.getElementById(sectionId);
+  rows.forEach(r=>{
+    const cls = r.ok ? 'ok' : (r.status===404 ? 'fail' : 'warn');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mono">${r.url.replace(location.origin,'')}</td>
+      <td class="${cls}">${r.ok ? 'OK ('+r.status+')' : (r.status==='ERR' ? 'ERR (เน็ต/CORS)' : 'HTTP '+r.status)}</td>
+      <td><a href="${r.url}" target="_blank">เปิด</a></td>`;
+    tb.appendChild(tr);
+  });
+}
+
+async function run(){
+  document.getElementById('tables').innerHTML = '';
+  logEl.textContent = '';
+  const base = document.getElementById('base').value.replace(/\/+$/,'');
+  const allResults = [];
+  let okCount = 0, total = 0;
+
+  for (const mf of MANIFESTS) {
+    log(`กำลังตรวจ: ${mf.title} ...`);
+    const res = await checkManifest(base, mf);
+    const rows = [{ url: res.manifest.url, ok: res.manifest.ok, status: res.manifest.status }].concat(res.shards);
+    renderTable('sec_'+mf.key, mf.title, rows);
+    rows.forEach(r => { total++; if(r.ok) okCount++; });
+    allResults.push({ mf: mf.title, rows });
+  }
+
+  const txt = (okCount===total)
+    ? `✅ ไฟล์ครบและเข้าถึงได้ทั้งหมด (${okCount}/${total})`
+    : `⚠️ พบข้อผิดพลาดบางไฟล์ (${okCount}/${total}) — ตรวจสอบชื่อไฟล์/ตำแหน่ง/Cache`;
+
+  document.getElementById('sum').innerHTML = `<strong>${txt}</strong>`;
+}
+
+// รันอัตโนมัติครั้งแรก
+run();
+</script>
 </body>
 </html>
